@@ -1,1 +1,17 @@
+```{r}
+#install.packages('readr')
+readr::read_delim('https://stepik.org/media/attachments/course/122402/data_tsv.tsv')
+```
+```{r}
+#install.packages('readxl')
+readxl::read_excel('https://stepik.org/media/attachments/lesson/790857/data_excel.xlsx', sheet = "data")
+```
+```{r}
+mean(c(-13, 19, -24, NA, 30, 64, -53, NA, 50, 31, -58, -34, -3, -34, 77),na.rm = T)
+mean(c(-19, -9, 19, 5, -14, 0, 34, -8, 34, 24, -11, 8, 33, 12, -6),na.rm = T)
+mean(c(76, 65, 71, 16, 60, 29, 71, 46, 45, 41),na.rm = T)
+mean(c(-2, 16, -3, 16, -9, 7, 31),na.rm = T)
+mean(c(NA, NA, NA, NA, NA, NA, 3, NA, NA),na.rm = T)
+mean(c(1, -1, 5, -12, -12, 3, 8, -10, 0),na.rm = T)
 
+```
