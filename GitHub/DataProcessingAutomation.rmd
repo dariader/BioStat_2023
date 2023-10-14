@@ -10,6 +10,7 @@ toc_title: "Sections"
 ```{r setup, include = FALSE}
 library(psych)
 library(tidyr)
+library(dplyr)
 library(stringr)
 
 ```
