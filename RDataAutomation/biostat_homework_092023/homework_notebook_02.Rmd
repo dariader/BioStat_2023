@@ -1,0 +1,281 @@
+---
+title: "automatization_notebook_02"
+output: word_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+#setwd('RDataAutomation')
+```
+
+# Чтение данных
+
+В вашем варианте нужно использовать датасет food.
+
+```{r}
+data <- read.csv('./RDataAutomation/biostat_homework_092023/data/raw/food.csv')
+str(data)
+```
+
+# Выведите общее описание данных
+
+```{r}
+library(dplyr)
+library(Hmisc)
+data %>% describe()
+```
+
+# Очистка данных
+
+1) Уберите переменные, в которых пропущенных значений больше 20% или уберите субъектов со слишком большим количеством пропущенных значений. Или совместите оба варианта. Напишите обоснование, почему вы выбрали тот или иной вариант:
+
+**Обоснование**: 
+
+2) Переименуйте переменные в человекочитаемый вид (что делать с пробелами в названиях?);
+
+3) В соответствии с описанием данных приведите переменные к нужному типу (numeric или factor);
+
+4) Отсортируйте данные по возрасту по убыванию;
+
+5) Сохраните в файл outliers.csv субъектов, которые являются выбросами (например, по правилу трёх сигм) — это необязательное задание со звёздочкой;
+
+6) Отфильтруйте датасет так, чтобы остались только Rice и Cookie (переменная Category и есть группирующая);
+
+7) Присвойте получившийся датасет переменной "cleaned_data".
+
+```{r}
+na_count <- sum(is.na(data)) # 0 выглядит так, что некоторые значения означают отстутсиве данных, но в NA не конвертируются.
+colnames(data) <- gsub("[^A-Za-z0-9_]", "_", colnames(data))
+data$Category <- as.factor(data$Category)
+data$Nutrient_Data_Bank_Number<- as.factor(data$Nutrient_Data_Bank_Number)
+data <- data %>% arrange(desc(Data_Carbohydrate))
+
+q1 <- quantile(data$Data_Carbohydrate, 0.135)
+q3 <- quantile(data$Data_Carbohydrate, 1-0.135)
+iqr <- q3 - q1
+
+outliers <- data[data$Data_Carbohydrate < q1 - 1.5 * iqr | data$Data_Carbohydrate > q3 + 1.5 * iqr,]
+write.csv(outliers, file='outliers.csv') # empty, too big IQR
+
+data = data %>% filter(Category %in% c("Rice", "Cookie"))
+cleaned_data = data
+
+```
+
+# Сколько осталось переменных?
+
+```{r}
+
+# поскольку пустые значения обнаружены не были, переменных осталось столько же сколько и было
+ncol(cleaned_data)
+
+```
+
+# Сколько осталось случаев?
+
+```{r}
+nrow(cleaned_data)
+
+```
+
+# Есть ли в данных идентичные строки?
+
+```{r}
+sum(duplicated(cleaned_data))# дуплицированных строк нет
+
+nrow(cleaned_data %>% distinct())# дуплицированных строк нет
+
+```
+
+# Сколько всего переменных с пропущенными значениями в данных и сколько пропущенных точек в каждой такой переменной?
+
+```{r}
+
+# пропущенных значений нет
+
+```
+
+# Описательные статистики
+
+## Количественные переменные
+
+1) Рассчитайте для всех количественных переменных для каждой группы (Category):
+
+1.1) Количество значений;
+
+1.2) Количество пропущенных значений;
+
+1.3) Среднее;
+
+1.4) Медиану;
+
+1.5) Стандартное отклонение;
+
+1.6) 25% квантиль и 75% квантиль;
+
+1.7) Интерквартильный размах;
+
+1.8) Минимум;
+
+1.9) Максимум;
+
+1.10) 95% ДИ для среднего - задание со звёздочкой.
+
+```{r}
+
+numeric_columns <- sapply(cleaned_data, is.numeric)
+calculate_stats <- function(column) {
+  count <- length(column)
+  missing <- sum(is.na(column))
+  mean_val <- mean(column)
+  median_val <- median(column)
+  sd_val <- sd(column)
+  q25 <- quantile(column, 0.25)
+  q75 <- quantile(column, 0.75)
+  iqr_val <- IQR(column)
+  min_val <- min(column)
+  max_val <- max(column)
+  ci95 <- mean_val + c(-1, 1) * qt(0.975, count - 1) * (sd_val / sqrt(count))
+
+  return(c(Count = count, Missing = missing, Mean = mean_val, Median = median_val, SD = sd_val, Q25 = q25, Q75 = q75, IQR = iqr_val, Min = min_val, Max = max_val, CI95 = ci95))
+}
+
+result <- by(cleaned_data[numeric_columns], cleaned_data$Category, FUN = function(df) {
+  result <- mapply(calculate_stats, df)
+  colnames(result) <- colnames(df)
+  return(result)
+})
+
+result_df <- do.call(rbind, result)
+
+print(result_df)
+```
+
+## Категориальные переменные
+
+1) Рассчитайте для всех категориальных переменных для каждой группы (Category):
+
+1.1) Абсолютное количество;
+
+1.2) Относительное количество внутри группы;
+
+1.3) 95% ДИ для доли внутри группы - задание со звёздочкой.
+
+```{r}
+
+result_df <- cleaned_data %>%
+  group_by(Category) %>%
+  summarise(
+    Absolute_Count = n(),  # количество ?
+    Relative_Count = n() / sum(n()),  # доля внутри группы?
+  )
+
+# Print the result
+print(result_df)
+
+```
+
+# Визуализация
+
+## Количественные переменные
+
+1) Для каждой количественной переменной сделайте боксплоты по группам. Расположите их либо на отдельных рисунках, либо на одном, но читаемо;
+
+2) Наложите на боксплоты beeplots - задание со звёздочкой.
+
+3) Раскрасьте боксплоты с помощью библиотеки RColorBrewer.
+
+```{r}
+install.packages('beeswarm')
+library(ggplot2)
+library(ggbeeswarm)
+library(RColorBrewer)
+library(reshape2)
+
+melted_data <- melt(cleaned_data%>% select(Category, where(is.numeric)), id.vars = "Category")
+
+
+ggplot(melted_data, aes(x = variable, y = value, fill = Category)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 1, outlier.size = 2, position = "dodge") +
+  geom_beeswarm(data = melted_data, cex = 0.6,  shape = 21,priority='density',size=2.5) +
+  scale_fill_brewer(palette = "Set3") +  # Use a color palette from RColorBrewer
+  labs(title = "Combined Boxplot with Beeswarm Overlay", x = "Variable", y = "Value") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+
+
+```
+
+## Категориальные переменные
+
+1) Сделайте подходящие визуализации категориальных переменных. Обоснуйте, почему выбрали именно этот тип.
+
+```{r}
+
+
+
+```
+
+
+# Статистические оценки
+
+## Проверка на нормальность
+
+1) Оцените каждую переменную на соответствие нормальному распределению с помощью теста Шапиро-Уилка. Какие из переменных являются нормальными и как как вы это поняли?
+
+```{r}
+
+
+
+```
+
+2) Постройте для каждой количественной переменной QQ-плот. Отличаются ли выводы от теста Шапиро-Уилка? Какой метод вы бы предпочли и почему?
+
+```{r}
+
+
+
+```
+
+3) Ниже напишите, какие ещё методы проверки на нормальность вы знаете и какие у них есть ограничения.
+
+**Напишите текст здесь**
+
+
+## Сравнение групп
+
+1) Сравните группы (переменная **Category**) по каждой переменной (как количественной, так и категориальной). Для каждой переменной выберите нужный критерий и кратко обоснуйте его выбор в комментариях.
+
+```{r}
+
+
+
+```
+
+# Далее идут **необязательные** дополнительные задания, которые могут принести вам дополнительные баллы в том числе в случае ошибок в предыдущих
+
+## Корреляционный анализ
+
+1) Создайте корреляционную матрицу с визуализацией и поправкой на множественные сравнения. Объясните, когда лучше использовать корреляционные матрицы и в чём минусы и плюсы корреляционных исследований.
+
+```{r}
+
+
+
+```
+
+## Моделирование
+
+1) Постройте регрессионную модель для переменной **Category**. Опишите процесс построения
+
+```{r}
+
+
+
+```
+
+
+
+
