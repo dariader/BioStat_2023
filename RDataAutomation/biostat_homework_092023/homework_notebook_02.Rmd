@@ -8,6 +8,7 @@ date: "`r Sys.Date()`"
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
+getwd()
 #setwd('RDataAutomation')
 ```
 
@@ -16,7 +17,7 @@ library(tidyverse)
 В вашем варианте нужно использовать датасет food.
 
 ```{r}
-data <- read.csv('./RDataAutomation/biostat_homework_092023/data/raw/food.csv')
+data <- read.csv('./data/raw/food.csv')
 str(data)
 ```
 
@@ -27,12 +28,15 @@ library(dplyr)
 library(Hmisc)
 data %>% describe()
 ```
-
+```{r}
+str(data)
+```
 # Очистка данных
 
 1) Уберите переменные, в которых пропущенных значений больше 20% или уберите субъектов со слишком большим количеством пропущенных значений. Или совместите оба варианта. Напишите обоснование, почему вы выбрали тот или иной вариант:
 
-**Обоснование**: 
+**Обоснование**:
+  Принято решение убрать субьектов, поскольку в таком случае остается больше данных для анализа. И не теряются важные предикторы.
 
 2) Переименуйте переменные в человекочитаемый вид (что делать с пробелами в названиях?);
 
@@ -47,14 +51,71 @@ data %>% describe()
 7) Присвойте получившийся датасет переменной "cleaned_data".
 
 ```{r}
-na_count <- sum(is.na(data)) # 0 выглядит так, что некоторые значения означают отстутсиве данных, но в NA не конвертируются.
+na_count <- sum(is.na(data)) # 0 выглядит так, что некоторые значения означают отстутсиве данных, но в NA не конвертируются. Примем за пустое значение - ноль в колонках с количественными метрикам
+na_count
+```
+```{r}
 colnames(data) <- gsub("[^A-Za-z0-9_]", "_", colnames(data))
 data$Category <- as.factor(data$Category)
 data$Nutrient_Data_Bank_Number<- as.factor(data$Nutrient_Data_Bank_Number)
 data <- data %>% arrange(desc(Data_Carbohydrate))
+str(data)
+```
+```{r}
+numeric_cols <- as.vector(names(data[,sapply(data, is.numeric)]))
+data[,numeric_cols][data[,numeric_cols]==0] <- NA
 
-q1 <- quantile(data$Data_Carbohydrate, 0.135)
-q3 <- quantile(data$Data_Carbohydrate, 1-0.135)
+na_count <- sum(is.na(data))
+na_count
+```
+
+```{r}
+library(Hmisc)
+data %>% describe()
+```
+```{r}
+threshold <- 0.2
+
+columns_dropna = data[,colSums(is.na(data))/nrow(data)<=threshold]
+
+columns_dim = columns_dropna %>% dim()
+
+print("Left items if delete columns with na")
+print(columns_dim[1]*columns_dim[2])
+
+hist(rowSums(is.na(columns_dropna))/ncol(columns_dropna), main = "% of NA in rows. Note there are rows with NA more than 60%")
+
+hist(colSums(is.na(columns_dropna))/nrow(columns_dropna), main = "% of NA in columns")
+columns_dropna = columns_dropna[rowSums(is.na(columns_dropna))/ncol(columns_dropna) > 0.2,] # If we drop columns with over 0.2
+dim(columns_dropna)
+```
+```{r}
+row_dropna = data %>%
+  filter(rowSums(is.na(.))/ncol(.) <= threshold)
+row_dim = data %>%
+  filter(rowSums(is.na(.))/ncol(.) <= threshold) %>% dim()
+
+print("Left items if delete rows with na")
+print(row_dim[1]*row_dim[2])
+
+print("More elements left if remove rows with more than 20% na")
+print(columns_dim[1]*columns_dim[2] < row_dim[1]*row_dim[2])
+
+hist(rowSums(is.na(row_dropna))/ncol(row_dropna), main = "% of NA in rows")
+
+hist(colSums(is.na(row_dropna))/nrow(row_dropna), main = "% of NA in columns. Note, there are columns with over than 60% NA")
+print("Removing columns with more than 20% of NA. Dataset dimension is:")
+cols_with_na_over_02 = names(row_dropna[,colSums(is.na(row_dropna))/nrow(row_dropna) > 0.2])
+row_dropna = row_dropna %>% select(-all_of(cols_with_na_over_02))
+dim(row_dropna)
+```
+```{r}
+# size of dataframe bigger in second case
+data = row_dropna
+```
+```{r}
+q1 <- quantile(data$Data_Carbohydrate, 0.135, na.rm = T)
+q3 <- quantile(data$Data_Carbohydrate, 1-0.135, na.rm = T)
 iqr <- q3 - q1
 
 outliers <- data[data$Data_Carbohydrate < q1 - 1.5 * iqr | data$Data_Carbohydrate > q3 + 1.5 * iqr,]
@@ -69,7 +130,7 @@ cleaned_data = data
 
 ```{r}
 
-# поскольку пустые значения обнаружены не были, переменных осталось столько же сколько и было
+# 31 из 38 осталось
 ncol(cleaned_data)
 
 ```
@@ -77,7 +138,7 @@ ncol(cleaned_data)
 # Сколько осталось случаев?
 
 ```{r}
-nrow(cleaned_data)
+nrow(cleaned_data) # 166 из 5409 после удаления пропущенных значений
 
 ```
 
@@ -94,7 +155,18 @@ nrow(cleaned_data %>% distinct())# дуплицированных строк н�
 
 ```{r}
 
-# пропущенных значений нет
+num_cols_w_na <- length(colSums(is.na(cleaned_data))>0)
+
+
+print("Total columns with missing values:")
+print(num_cols_w_na)
+
+missing_per_variable <- cleaned_data %>%  select_if(is.numeric) %>%
+  pivot_longer(everything()) %>%
+  group_by(name) %>%
+  summarise(missing = sum(is.na(value)), perc = sum(is.na(value))/nrow(data)*100)
+
+print(missing_per_variable)
 
 ```
 
@@ -130,14 +202,14 @@ numeric_columns <- sapply(cleaned_data, is.numeric)
 calculate_stats <- function(column) {
   count <- length(column)
   missing <- sum(is.na(column))
-  mean_val <- mean(column)
-  median_val <- median(column)
-  sd_val <- sd(column)
-  q25 <- quantile(column, 0.25)
-  q75 <- quantile(column, 0.75)
-  iqr_val <- IQR(column)
-  min_val <- min(column)
-  max_val <- max(column)
+  mean_val <- mean(column, na.rm = T)
+  median_val <- median(column, na.rm = T)
+  sd_val <- sd(column, na.rm = T)
+  q25 <- quantile(column, 0.25, na.rm = T)
+  q75 <- quantile(column, 0.75, na.rm = T)
+  iqr_val <- IQR(column, na.rm = T)
+  min_val <- min(column, na.rm = T)
+  max_val <- max(column, na.rm = T)
   ci95 <- mean_val + c(-1, 1) * qt(0.975, count - 1) * (sd_val / sqrt(count))
 
   return(c(Count = count, Missing = missing, Mean = mean_val, Median = median_val, SD = sd_val, Q25 = q25, Q75 = q75, IQR = iqr_val, Min = min_val, Max = max_val, CI95 = ci95))
@@ -170,7 +242,7 @@ result_df <- cleaned_data %>%
   group_by(Category) %>%
   summarise(
     Absolute_Count = n(),  # количество ?
-    Relative_Count = n() / sum(n()),  # доля внутри группы?
+    Relative_Count = (n() / nrow(cleaned_data)),  # доля внутри группы?
   )
 
 # Print the result
@@ -189,7 +261,6 @@ print(result_df)
 3) Раскрасьте боксплоты с помощью библиотеки RColorBrewer.
 
 ```{r}
-install.packages('beeswarm')
 library(ggplot2)
 library(ggbeeswarm)
 library(RColorBrewer)
@@ -200,10 +271,11 @@ melted_data <- melt(cleaned_data%>% select(Category, where(is.numeric)), id.vars
 
 ggplot(melted_data, aes(x = variable, y = value, fill = Category)) +
   geom_boxplot(outlier.colour = "red", outlier.shape = 1, outlier.size = 2, position = "dodge") +
-  geom_beeswarm(data = melted_data, cex = 0.6,  shape = 21,priority='density',size=2.5) +
-  scale_fill_brewer(palette = "Set3") +  # Use a color palette from RColorBrewer
-  labs(title = "Combined Boxplot with Beeswarm Overlay", x = "Variable", y = "Value") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better readability
+ # geom_beeswarm(data = melted_data, cex = 0.6, shape = 21, priority='density',size=2.5) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(title = "Boxplot with beeswarm overlay", x = "Variable", y = "Value") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~Category)
 
 
 ```
@@ -213,8 +285,12 @@ ggplot(melted_data, aes(x = variable, y = value, fill = Category)) +
 1) Сделайте подходящие визуализации категориальных переменных. Обоснуйте, почему выбрали именно этот тип.
 
 ```{r}
+# у нас не так много категориальных колонок: Category и Nutrient_Data_Bank_Number
 
+ggplot(data, aes(x = Category)) +
+  geom_bar()
 
+ggplot(data, aes(x = Nutrient_Data_Bank_Number)) + geom_bar() # не очень содержательный график, потому что эта переменная содержит исключительно уникальные значения.
 
 ```
 
@@ -226,22 +302,34 @@ ggplot(melted_data, aes(x = variable, y = value, fill = Category)) +
 1) Оцените каждую переменную на соответствие нормальному распределению с помощью теста Шапиро-Уилка. Какие из переменных являются нормальными и как как вы это поняли?
 
 ```{r}
+## все переменные распределены не нормально, поскольку мы отвергаем нулевую гипотезу теста при уровне значимости 0.05
 
+shapiro_test <- function(x) {
+  result <- shapiro.test(x)
+  return(ifelse(result$p.value <= 0.05, 'not normal', 'normal'))
+}
+shapiro_p_values <- sapply(cleaned_data %>% select(is.numeric) , shapiro_test)
+
+shapiro_p_values
 
 
 ```
-
-2) Постройте для каждой количественной переменной QQ-плот. Отличаются ли выводы от теста Шапиро-Уилка? Какой метод вы бы предпочли и почему?
-
 ```{r}
+qq_plot <- function(x) {
+  qqnorm(x)
+  qqline(x)
+}
 
-
+lapply(cleaned_data %>% select(is.numeric), qq_plot)
 
 ```
+2) Постройте для каждой количественной переменной QQ-плот. Отличаются ли выводы от теста Шапиро-Уилка? Какой метод вы бы предпочли и почему?
+Выводы такие же, предпочла бы qq plot потому что видно остатки и можно догадаться о природе распределения.
 
 3) Ниже напишите, какие ещё методы проверки на нормальность вы знаете и какие у них есть ограничения.
 
 **Напишите текст здесь**
+ 4) Probability plot - визуально оценить распределение (минус - нет единой метрики)
 
 
 ## Сравнение групп
@@ -250,7 +338,16 @@ ggplot(melted_data, aes(x = variable, y = value, fill = Category)) +
 
 ```{r}
 
+chi_square_tests <- function(var_name) {
+  contingency_table <- table(cleaned_data[, var_name], cleaned_data$Category, useNA = "no", dnn = c(var_name, "Category"))
+  chi_squared_result <- chisq.test(contingency_table)
+  return(chi_squared_result)
+}
 
+for (var in names(cleaned_data %>% select(is.integer))) {
+  print(var)
+  print(chi_square_tests(var))
+}
 
 ```
 
