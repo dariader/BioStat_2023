@@ -1,0 +1,274 @@
+---
+title: "Task 4"
+author: "Evgeny Bakin"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(broom)
+
+```
+
+# Сравнение вероятностей наступления события в двухгрупповом исследовании
+
+## 1. Модель пациента
+
+```{r model}
+
+p_R <- 0.1 # Истинная вероятность выздоровления для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+p_T <- 0.2 # Истинная вероятность выздоровления для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+true_OR <- (p_T/(1-p_T))/(p_R/(1-p_R)) # Истинное отношение шансов
+
+```
+## 2. Генерация однократной выборки
+
+```{r one_sample}
+
+sample_size <- 100 # Количество пациентов в каждой из групп
+
+df_trial <- data.frame(
+  arm = rep(c('R', 'T'), each = sample_size),
+  patient_ID = rep(1:sample_size, 2),
+  recovery_status = c(sample(c(1,0), sample_size, replace = TRUE, prob = c(p_R, 1 - p_R)),
+                      sample(c(1,0), sample_size, replace = TRUE, prob = c(p_T, 1 - p_T)))
+)
+
+```
+## 3. Построение ДИ для разницы вероятностей
+
+```{r diff}
+
+df_prop <- df_trial %>%
+  #group_by(arm) %>% # Группировка типу интервенции (тест/референс)
+  dplyr::summarise(x = sum(recovery_status), # Подсчет числа положительных исходов (единиц)
+                   n = n()) %>% # Подсчет общего числа пациентов в группе
+  ungroup() %>% 
+  dplyr::summarise(X = as.array(x), N = as.array(n)) %>% # Соединение все x и n в отдельные вектора
+  # заменила list(x) потому что он поднимал ошибку - unimplemented type 'list' in 'EncodeElement'
+  rowwise() %>% 
+  mutate(tst = list(broom::tidy(prop.test(X, N)))) %>% # Вычисление ДИ на разницу пропорций # в этом варианте теста он считает 1-sample proportions, а надо 2-sample. отсюда неправильное сравнение ниже
+  unnest(tst) %>% # Раскладка результатов prop.test по столбцам 
+  mutate(catch = ifelse(conf.low < p_R-p_T & p_R-p_T < conf.high, "Catch", "Miss")) # истинная разность вероятностей должна быть покрыта. Непонятно почему мы сравниваем confidence interval для одной группы с разницей истинных вероятностей. Кажется что в таком случае надо рассчитывать разницу вероятностей.
+  
+df_prop
+
+```
+
+## ЗАДАНИЕ №1
+
+- Повторить этот эксперимент 1000 раз, каждый раз фиксируя факт накрытия истинной разницы в вероятностях (p_R-p_T).+
+- Оценить полученную вероятность накрытия (истинной разницы вероятностей?) с заданной по умолчанию (0.95).
+- Построить гистограмму точечной оценки разницы вероятностей (estimate1-estimae2) и подумать о ее распределении.
+- Проверить, корректно ли работает методика построения ДИ, реализованная в prop.test, при различных значениях p_R и p_T.
+
+```{r}
+
+call_experiment <- function (p_R,p_t, true_OR){
+  sample_size <- 100 # Количество пациентов в каждой из групп
+
+    df_trial <- data.frame(
+      arm = rep(c('R', 'T'), each = sample_size),
+      patient_ID = rep(1:sample_size, 2),
+      recovery_status = c(sample(c(1,0), sample_size, replace = TRUE, prob = c(p_R, 1 - p_R)),
+                          sample(c(1,0), sample_size, replace = TRUE, prob = c(p_T, 1 - p_T)))
+
+    )
+
+    df_prop <- df_trial %>%
+      group_by(arm) %>% # Группировка типу интервенции (тест/референс)
+      dplyr::reframe(x = sum(recovery_status), # Подсчет числа положительных исходов (единиц)
+                       n = n()) %>% # Подсчет общего числа пациентов в группе
+      ungroup() %>%
+      dplyr::reframe(X = x, N = n) # Соединение все x и n в отдельные вектора
+      # заменила list(x) потому что он поднимал ошибку - unimplemented type 'list' in 'EncodeElement'
+
+     df_res = as.data.frame(broom::tidy(prop.test(df_prop$X, df_prop$N))) %>%  # Вычисление ДИ на разницу пропорций.
+      mutate(catch = ifelse(conf.low < p_R-p_T & p_R-p_T < conf.high, "Catch", "Miss"))
+      return(df_res)
+}
+
+exp_list <- list()
+
+for (i in 1:1000) {
+    exp_list[[i]] <- call_experiment(p_R,p_t, true_OR)
+}
+
+
+exp_df = bind_rows(exp_list, .id = "exp_num")
+```
+```{r}
+library(reshape2)
+# Оценить полученную вероятность накрытия (истинной разницы вероятностей?) с заданной по умолчанию (0.95).
+melted_df <- melt(exp_df[c("conf.high", "conf.low", "catch")], id.vars = "catch")
+library(ggplot2)
+ggplot(melted_df, aes(x = value, fill=catch)) + geom_histogram(position = "dodge") + labs(title = "Intersection of Intervals")
+ggplot(exp_df, aes(x = catch)) + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Probabilities to Catch or Miss the true difference")
+
+ggplot(exp_df, aes(y = exp_num)) +
+  geom_errorbar(mapping = aes(xmin = conf.low, xmax = conf.high, color = catch), linewidth = 2) +
+  geom_vline(xintercept=p_R-p_T, linetype="dashed",
+                color = "black", linewidth=2) +
+  theme_bw() +
+  theme(text = element_text(size = 30))
+
+
+table(exp_df['catch'])
+
+
+```
+```{r}
+# Построить гистограмму точечной оценки разницы вероятностей (estimate1-estimae2) и подумать о ее распределении
+
+ggplot(exp_df, aes(x = exp_df$estimate1-exp_df$estimate2, fill=catch)) + geom_histogram(bins = 200) + labs(title = "Estimate difference")
+# думаю что похоже на нормально, но это надо проверять. Похоже что есть выбросы.
+plot.new()
+qqnorm(exp_df$estimate1-exp_df$estimate2) # seems ok
+shapiro.test(exp_df$estimate1-exp_df$estimate2) # not normal?
+```
+
+```{r}
+# Проверить, корректно ли работает методика построения ДИ, реализованная в prop.test, при различных значениях p_R и p_T.
+# Предположим что разница в estimate распределена нормально (что не следует из предыдущего блока анализа)
+# тогда можно посчитать ожидаемые интервалы
+
+p_R <- 0.001# Истинная вероятность выздоровления для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+p_T <- 0.99 # Истинная вероятность выздоровления для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+true_OR <- (p_T/(1-p_T))/(p_R/(1-p_R)) # Истинное отношение шансов
+
+exp_list <- list()
+
+for (i in 1:1000) {
+    exp_list[[i]] <- call_experiment(p_R,p_t, true_OR)
+}
+
+
+exp_df = bind_rows(exp_list, .id = "exp_num")
+
+# Sample data
+data <-exp_df$estimate1-exp_df$estimate2
+# Calculate the 95% confidence interval
+result <- t.test(data, conf.level = 0.95, alternative = "two.sided")
+conf_int <- result$conf.int
+
+ggplot(exp_df, aes(x = exp_df$estimate1-exp_df$estimate2, fill=catch)) +
+  geom_histogram(bins = 200) +
+  labs(title = "Estimate difference") +
+  geom_vline(xintercept = c(conf_int[1], conf_int[2]), color = "red", linetype = "dashed")
+# Есть ощущение что график сдвинут вправо, вне зависимости от истинных вероятностей. Хвост слева длинее хвоста справа.
+```
+
+
+
+## 4. Построение ДИ для отношения шансов
+
+```{r OR}
+
+p_R <- 0.1 # Истинная вероятность выздоровления для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+p_T <- 0.2 # Истинная вероятность выздоровления для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+true_OR <- (p_T/(1-p_T))/(p_R/(1-p_R)) # Истинное отношение шансов
+
+df_OR <- df_trial %>%
+  dplyr::summarise(broom::tidy(fisher.test(table(.$arm, .$recovery_status)))) %>% 
+  mutate(catch = ifelse(conf.low < true_OR & true_OR < conf.high, "Catch", "Miss"))
+
+print(df_OR)
+```
+
+## ЗАДАНИЕ №2
+
+- Повторить этот эксперимент 1000 раз, каждый раз фиксирую факт накрытия истинного отношения шансов (true_OR). 
+- Оценить полученную вероятность накрытия с заданной по умолчанию (0.95).
+- Построить гистограмму точечной оценки отношения шансов (estimate) и подумать о ее распределении. 
+- Проверить, корректно ли работает методика построения ДИ, реализованная в fisher.test, при различных значениях p_R и p_T.
+```{r}
+
+# Повторить этот эксперимент 1000 раз, каждый раз фиксирую факт накрытия истинного отношения шансов (true_OR).
+
+call_second <- function(p_R, p_T,true_OR ){
+    sample_size <- 100 # Количество пациентов в каждой из групп
+
+    df_trial <- data.frame(
+      arm = rep(c('R', 'T'), each = sample_size),
+      patient_ID = rep(1:sample_size, 2),
+      recovery_status = c(sample(c(1,0), sample_size, replace = TRUE, prob = c(p_R, 1 - p_R)),
+                          sample(c(1,0), sample_size, replace = TRUE, prob = c(p_T, 1 - p_T)))
+
+    )
+    return(
+      df_trial %>%
+  dplyr::summarise(broom::tidy(fisher.test(table(.$arm, .$recovery_status)))) %>%
+  mutate(catch = ifelse(conf.low < true_OR & true_OR < conf.high, "Catch", "Miss")
+  )
+)
+}
+
+
+exp_sec_list <- list()
+
+for (i in 1:1000) {
+    exp_sec_list[[i]] <- call_second(p_R,p_T, true_OR)
+}
+
+
+exp_sec_df = bind_rows(exp_sec_list, .id = "exp_num")
+
+```
+```{r}
+melted_df <- melt(exp_sec_df[c("conf.high", "conf.low", "catch")], id.vars = "catch")
+ggplot(melted_df, aes(x = value, fill=catch)) + geom_histogram(position = "dodge", bins = 100) + labs(title = "Intersection of Intervals")
+ggplot(exp_sec_df, aes(x = catch)) + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Probabilities to Catch or Miss the true difference")
+
+ggplot(exp_sec_df, aes(y = exp_num)) +
+  geom_errorbar(mapping = aes(xmin = conf.low, xmax = conf.high, color = catch), linewidth = 2) +
+  geom_vline(xintercept=true_OR, linetype="dashed",
+                color = "black", linewidth=2) +
+  theme_bw() +
+  theme(text = element_text(size = 30))
+
+
+table(exp_sec_df['catch'])
+```
+```{r}
+ggplot(exp_sec_df, aes(x = exp_sec_df$estimate, fill=catch)) +
+  geom_histogram(bins = 200) +
+  labs(title = "Estimate difference")
+
+# в этом подходе график сдвинут влево, не возникает сомнений что распределение не нормальное
+```
+```{r}
+
+p_R <- 0.99 # Истинная вероятность выздоровления для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+p_T <- 0.50 # Истинная вероятность выздоровления для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+true_OR <- (p_T/(1-p_T))/(p_R/(1-p_R)) # Истинное отношение шансов
+
+exp_sec_list <- list()
+
+for (i in 1:1000) {
+    exp_sec_list[[i]] <- call_second(p_R,p_T, true_OR)
+}
+
+
+exp_sec_df = bind_rows(exp_sec_list, .id = "exp_num")
+
+ggplot(exp_sec_df, aes(x = exp_sec_df$estimate, fill=catch)) +
+  geom_histogram(bins = 200) +
+  labs(title = "Estimate difference")+
+  geom_vline(xintercept = true_OR, color = "red", linetype = "dashed")
+
+# В данном случае ДИ посчитаны как-то странно
+```
+```{r}
+
+```

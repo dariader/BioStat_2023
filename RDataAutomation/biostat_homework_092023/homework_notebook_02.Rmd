@@ -121,8 +121,8 @@ iqr <- q3 - q1
 outliers <- data[data$Data_Carbohydrate < q1 - 1.5 * iqr | data$Data_Carbohydrate > q3 + 1.5 * iqr,]
 write.csv(outliers, file='outliers.csv') # empty, too big IQR
 
-data = data %>% filter(Category %in% c("Rice", "Cookie"))
-cleaned_data = data
+data=data %>% filter(Category %in% c("Rice", "Cookie"))
+cleaned_data=data
 
 ```
 
@@ -308,7 +308,7 @@ shapiro_test <- function(x) {
   result <- shapiro.test(x)
   return(ifelse(result$p.value <= 0.05, 'not normal', 'normal'))
 }
-shapiro_p_values <- sapply(cleaned_data %>% select(is.numeric) , shapiro_test)
+shapiro_p_values <- sapply(cleaned_data %>% filter(Category %in% c("Rice"))%>% select(is.numeric) , shapiro_test)
 
 shapiro_p_values
 

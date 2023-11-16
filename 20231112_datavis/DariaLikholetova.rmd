@@ -1,0 +1,80 @@
+---
+title: "R Notebook"
+output: html_document
+---
+
+1. Загрузите датасет life_expectancy_data.RDS (лежит в папке домашнего задания).
+Это данные с основными показателями, через которые высчитывается ожидаемая
+продолжительности жизни по метрике World Development Indicator на уровне
+стран2. В данных оставлены строки, относящиеся к положению женщин в 2019 г.
+
+```{r}
+library(readr)
+df <- read_rds('./20231112_datavis/life_expectancy_data.RDS')
+str(df)
+```
+
+3. Сделайте интерактивный plotly график любых двух нумерических колонок.
+Раскрасть по колонке континента, на котором расположена страна
+
+```{r}
+library(plotly)
+
+plot <- plot_ly(
+  data = df,
+  x = ~log10(GDP),
+  y = ~`Life expectancy`,
+  type = "scatter",
+  mode = "markers",
+  color = ~continent,
+  colors = c("red", "blue", "green", "purple", "orange"),
+  marker = list(size = 10)
+) %>%
+  layout(
+    title = "Life expectancy vs GDP",
+    xaxis = list(title = "Log(GDP)"),
+    yaxis = list(title = "Life Expectancy")
+  )
+
+# Display the plot
+print(plot)
+
+```
+
+
+3. Проведите тест, на сравнение распределений колонки `Life expectancy` между
+группами стран Африки и Америки. Вид статистического теста определите
+самостоятельно. Визуализируйте результат через библиотеку `rstatix`.
+```{r}
+library(rstatix)
+qqnorm(df$`Life expectancy`)
+hist(df$`Life expectancy`, 100)
+df$LE = df$`Life expectancy`
+africa_data <- df[df$continent == "Africa", "Life expectancy"]
+america_data <- df[df$continent == "Americas", "Life expectancy"]
+wilcox_dat <- cbind(africa_data, america_data)
+names(wilcox_dat) <- c('africa','america')
+wilcox_result <-  df %>% filter(continent %in% c('Africa','Americas')) %>% rstatix::wilcox_test(formula=continent ~ LE, paired = TRUE)
+print(wilcox_result)
+continents <- df %>% filter(continent %in% c('Africa','Americas'))
+ggboxplot(continents,
+   x = "continent", y = "Life expectancy",
+  color = "continent", palette = "jco"
+  ) + stat_pvalue_manual(wilcox_result, label = "Wilcox test, p = {p}",
+                      y.position = 90)
+
+```
+
+
+4. Сделайте новый датафрейм, в котором оставите все численные колонки кроме
+`Year`. Сделайте корреляционный анализ этих данных. Постройте два любых типа
+графиков для визуализации корреляций.
+5. Постройте иерархическую кластеризацию на этом датафрейме.
+6. Сделайте одновременный график heatmap и иерархической кластеризации.
+Содержательно интерпретируйте результат.
+7. Проведите PCA анализ на этих данных. Проинтерпретируйте результат.
+8. Постройте biplot график для PCA. Раскрасьте его по значениям континентов.
+Переведите его в `plotly`. Желательно, чтобы при наведении на точку, вы могли
+видеть название страны.
+9. Дайте содержательную интерпретацию PCA анализу.
+10. Сравните результаты отображения точек между алгоритмами PCA и UMAP.

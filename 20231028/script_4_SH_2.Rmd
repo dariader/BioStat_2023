@@ -1,0 +1,82 @@
+---
+title: "Statistical hypothesis testing (part 1)"
+author: "Evgeny Bakin"
+date: '2022-07-02'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+## Эксперимент №1: границы критической области и вероятность ошибки I рода
+## Мы во Вселенной, где препарат не работает
+
+```{r exp_2, echo=FALSE, fig.height=6, fig.width=6}
+
+num_centers <- 1000 # Сколько раз повторим эксперимент?
+
+sample_size <- 300 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 0 # Истинное среднее изменение гемоглобина
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  dplyr::summarise(t = sqrt(sample_size)*mean(Hg_change)/sd(Hg_change)) %>% 
+  ungroup()
+
+hist(trial_results$t)
+
+alpha <- 0.05 # Уровень значимости (ошибка первого рода)
+a <- qnorm(alpha/2) # Нижняя граница
+b <- qnorm(1 - alpha/2) # Верхняя граница
+
+a <- qt(alpha/2, df = sample_size-1) # Нижняя граница
+b <- qt(1 - alpha/2, df = sample_size-1) # Верхняя граница
+
+
+trial_errors <- trial_results %>% 
+  mutate(out = ifelse((t < b) & (t > a), 'Fail to reject H0', 'Reject H0'))
+
+table(trial_errors$out)
+
+```
+## Эксперимент №2: границы критической области и вероятность ошибки II рода
+## Оказывается, что препарат работает
+
+```{r exp_2, echo=FALSE, fig.height=6, fig.width=6}
+
+num_centers <- 1000 # Сколько раз повторим эксперимент?
+
+sample_size <- 300 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 2 # Истинное среднее изменение гемоглобина
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  dplyr::summarise(t = sqrt(sample_size)*mean(Hg_change)/sd(Hg_change)) %>% 
+  ungroup()
+
+hist(trial_results$t)
+
+trial_errors <- trial_results %>% 
+  mutate(out = ifelse((t < b) & (t > a), 'Fail to reject H0', 'Reject H0'))
+
+table(trial_errors$out)
+
+```

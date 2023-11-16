@@ -1,0 +1,77 @@
+---
+title: "Statistical hypothesis testing (part 1)"
+author: "Evgeny Bakin"
+date: '2022-07-02'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+## Эксперимент №1: Статистика критерия и p-значения
+
+```{r exp_2, echo=FALSE, fig.height=6, fig.width=6}
+
+num_centers <- 1000 # Сколько раз повторим эксперимент?
+
+sample_size <- 300 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 0 # Истинное среднее изменение гемоглобина
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = True_Hg_improve, sd = Hg_sd)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  dplyr::summarise(t = abs(sqrt(sample_size)*mean(Hg_change)/sd(Hg_change))) %>% 
+  ungroup()
+
+hist(trial_results$t)
+abline(v = qt(0.975, sample_size-1), col="red", lwd=3, lty=2)
+
+new_sample <- rnorm(sample_size, mean = 0.5, sd = Hg_sd)
+
+new_t <- abs(sqrt(sample_size)*mean(new_sample)/sd(new_sample))
+abline(v = new_t, col="blue", lwd=3, lty=2)
+
+print(new_t)
+print("С какой вероятностью мы получали меньшие значения?")
+print(sum(trial_results$t < new_t)/num_centers)
+print("...такие или бОльшие?")
+print()
+
+
+
+```
+## Эксперимент №2: Всегда ли мы контролируем ошибки I рода?
+
+```{r exp_2, echo=FALSE, fig.height=6, fig.width=6}
+
+num_centers <- 10000 # Сколько раз повторим эксперимент?
+
+sample_size <- 300 # Количество пациентов, прошедших, терапию
+True_Hg_improve <- 0 # Истинное среднее изменение гемоглобина
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rexp(sample_size*num_centers)
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(Hg_change ~ 1, conf.level = 0.95, data = ., mu = 1))) %>%
+  ungroup()
+
+hist(trial_results$p.value,20)
+abline(h = num_centers/20, col="red", lwd=3, lty=2)
+
+```

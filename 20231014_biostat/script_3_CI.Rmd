@@ -1,0 +1,265 @@
+---
+title: "Confidence intervals"
+author: "Evgeny Bakin"
+date: '2022-07-02'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+```
+
+# Эксперимент №1: одноцентровое, одновыборочное исследование по повышению уровня гемоглобина
+
+```{r exp_1}
+
+sample_size <- 30 # Количество пациентов, прошедших, терапию
+
+Hg_improve <- 20 # Истинное среднее изменение уровня Hg (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+Hg_sd <- 12 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  ID = 1:sample_size,
+  Hg_change = rnorm(sample_size, mean = Hg_improve, sd = Hg_sd)
+)
+
+t.test(df_trial$Hg_change)
+
+trial_results <- df_trial %>% 
+  t.test(Hg_change ~ 1, conf.level = 0.95, data = .) %>% 
+  broom::tidy() %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low)
+
+trial_results
+# Что происходит с ДИ при изменении:
+# - объема выборки?
+# - стандартного отклонения?
+# - уровня доверия?
+
+```
+
+## Эксперимент №2: Можно ли доверять доверительному интервалу?
+
+```{r exp_2, echo=FALSE, fig.height=15}
+
+num_centers <- 1000 # Сколько центров поучаствует в эксперименте?
+
+sample_size <- 3 # Количество пациентов, прошедших, терапию
+Hg_improve <- 20 # Истинное среднее изменение уровня Hg (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  Hg_change = rnorm(sample_size*num_centers, mean = Hg_improve, sd = Hg_sd)
+)
+
+hist(df_trial$Hg_change)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(Hg_change ~ 1, conf.level = 0.95, data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low) %>% 
+  mutate(out = ifelse((Hg_improve < conf.high) & (Hg_improve > conf.low), 'ok', 'missed'))
+
+table(trial_results$out)
+
+# Как зависит вероятность промаха при изменении:
+# - объема выборки?
+# - стандартного отклонения?
+# - уровня доверия?
+
+```
+
+## Визуализация
+
+```{r exp_2_viz, echo=FALSE, fig.height=15}
+
+ggplot(trial_results, aes(y = center_ID)) +
+  geom_errorbar(mapping = aes(xmin = conf.low, xmax = conf.high, color = out), size = 2) +
+  geom_vline(xintercept=Hg_improve, linetype="dashed", 
+                color = "black", size=2) +
+  theme_bw() +
+  theme(text = element_text(size = 30))  
+
+
+```
+
+## Эксперимент №3: Точно можно доверять?
+
+```{r exp_3, echo=FALSE}
+
+num_centers <- 1000 # Сколько центров поучаствует в эксперименте?
+
+sample_size <- 100 # Количество пациентов, прошедших, терапию
+avg_recovery_time <- 20 # Истинное среднее время до выздоровления (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+df_trial <- data.frame(
+  center_ID = rep(1:num_centers, each = sample_size),
+  patient_ID = rep(1:sample_size, num_centers),
+  recovery_time = rexp(sample_size*num_centers, rate = 1/avg_recovery_time) 
+)
+
+trial_results <- df_trial %>% 
+  group_by(center_ID) %>% 
+  do(broom::tidy(t.test(recovery_time ~ 1, conf.level = 0.95, data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low) %>% 
+  mutate(out = ifelse((avg_recovery_time < conf.high) & (avg_recovery_time > conf.low), 'ok', 'missed'))
+
+table(trial_results$out)
+
+# Как зависит вероятность промаха при изменении:
+# - объема выборки?
+
+```
+# Эксперимент №4: одноцентровое, двухвыборочное исследование по времени выздоровления
+
+```{r exp_4}
+
+sample_size <- 30 # Количество пациентов, прошедших терапию в каждой из групп
+
+avg_recovery_time_R <- 20 # Истинное среднее время выздоровление для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+avg_recovery_time_T <- 10 # Истинное среднее время выздоровление для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+time_sd <- 3 # Разброс во времени выздоровление 
+
+df_trial <- data.frame(
+  arm = rep(c('R', 'T'), each = sample_size),
+  patient_ID = rep(1:sample_size, 2),
+  recovery_time = c(rnorm(sample_size, mean = avg_recovery_time_R, sd = time_sd),
+                    rnorm(sample_size, mean = avg_recovery_time_T, sd = time_sd))
+)
+
+trial_results <- df_trial %>% 
+  do(broom::tidy(t.test(recovery_time ~ arm, conf.level = 0.95, data = .))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) %>% 
+  mutate(CI_width = conf.high - conf.low)
+trial_results
+# ДИ для чего показывает функция? для разницы средних значений в группах
+
+```
+
+# Эксперимент №5: тоже самое, только для вероятностей.
+
+## Одновыборочное исследование
+
+```{r exp_5_1}
+
+sample_size <- 100 # Количество пациентов, прошедших терапию в каждой из групп
+
+p_recovery <- 0.2 # Истинная вероятность выздоровления (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+df_trial <- data.frame(
+  patient_ID = 1:sample_size,
+  recovery_status = sample(c(1,0), sample_size, replace = TRUE, prob = c(p_recovery, 1 - p_recovery))
+)
+
+trial_results <- df_trial %>% 
+  count(recovery_status) %>% 
+  filter(recovery_status == 1) %>% 
+  rowwise() %>%
+  dplyr::summarise(broom::tidy(prop.test(x = n, n = sample_size, conf.level = 0.95))) %>% 
+  dplyr::select(estimate, conf.low, conf.high) 
+trial_results
+
+```
+## Двухвыборочное исследование
+
+```{r exp_5_2}
+
+sample_size <- 100 # Количество пациентов, прошедших терапию в каждой из групп
+
+p_R <- 0.1 # Истинная вероятность выздоровления для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+p_T <- 0.2 # Истинная вероятность выздоровления для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+df_trial <- data.frame(
+  arm = rep(c('R', 'T'), each = sample_size),
+  patient_ID = rep(1:sample_size, 2),
+  recovery_status = c(sample(c(1,0), sample_size, replace = TRUE, prob = c(p_R, 1 - p_R)),
+                      sample(c(1,0), sample_size, replace = TRUE, prob = c(p_T, 1 - p_T)))
+)
+
+trial_results <- df_trial %>% 
+  count(arm, recovery_status) %>% 
+  filter(recovery_status == 1) %>% 
+  pivot_wider(names_from = arm, values_from = n) %>% 
+  rowwise() %>%
+  dplyr::summarise(broom::tidy(prop.test(x = c(T,R), n = c(sample_size,sample_size), conf.level = 0.95))) %>%  
+  dplyr::select(estimate1, estimate2, conf.low, conf.high) 
+
+
+
+```
+## Отношение шансов
+
+```{r exp_5_3}
+
+sample_size <- 1000 # Количество пациентов, прошедших терапию в каждой из групп
+
+p_R <- 0.1 # Истинная вероятность выздоровления для референса (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+p_T <- 0.2 # Истинная вероятность выздоровления для теста (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+df_trial <- data.frame(
+  arm = rep(c('R', 'T'), each = sample_size),
+  patient_ID = rep(1:sample_size, 2),
+  recovery_status = c(sample(c(1,0), sample_size, replace = TRUE, prob = c(p_R, 1 - p_R)),
+                      sample(c(1,0), sample_size, replace = TRUE, prob = c(p_T, 1 - p_T)))
+)
+
+trial_results <- df_trial %>% 
+  count(arm, recovery_status) %>% 
+  pivot_wider(names_from = recovery_status, values_from = n) %>% 
+  dplyr::select(-arm) %>% 
+  fisher.test(conf.level = 0.95) %>% 
+  broom::glance()
+
+```
+
+# Эксперимент №6: Двусторонние vs. односторонние
+
+```{r exp_6}
+
+sample_size <- 100 # Количество пациентов, прошедших, терапию
+
+Hg_improve <- 20 # Истинное среднее изменение уровня Hg (в ГЕНЕРАЛЬНОЙ СОВОКУПНОСТИ)
+
+Hg_sd <- 6 # Разброс в улучшении Hg
+
+Hg_change <- rnorm(sample_size, 
+                   mean = Hg_improve, 
+                   sd = Hg_sd) # На сколько изменился Hg у пациентов?
+
+# Меряем, на сколько изменилось давление после терапии:
+result <- t.test(Hg_change, 
+                 conf.level = 0.95)
+
+print('Двусторонний ДИ:')
+print(result)
+
+result <- t.test(Hg_change, 
+                 conf.level = 0.95, 
+                 alternative = 'greater')
+print('Односторонний ДИ:')
+print(result)
+
+# Попробуйте правосторонний ДИ:
+
+result <- t.test(Hg_change, 
+                 conf.level = 0.95, 
+                 alternative = 'less')
+print('Односторонний ДИ:')
+print(result)
+
+
+```
+

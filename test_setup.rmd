@@ -1,0 +1,142 @@
+---
+title: "Testing env"
+output: html_notebook
+---
+```{r}
+library(ggplot2)
+library(dplyr)
+beav <- beaver1
+beav$id <- 1:nrow(beaver1)
+beav <- beav %>% mutate(activ = factor(activ))
+ggplot(data = beav, aes(x = id, y = temp, group = activ, color = activ)) + geom_line() + geom_point()
+```
+```{r}
+library("ggfortify")
+df <- mtcars[, c("mpg", "disp", "hp", "drat", "wt")]
+df <- as.matrix(df)
+autoplot(scale(df))
+```
+```{r}
+library("ggpubr")
+set.seed(1234)
+wdata = data.frame(
+sex = factor(rep(c("F", "M"), each=200)),
+weight = c(rnorm(200, 55), rnorm(200, 58)))
+ggdensity(wdata, x = "weight",
+add = "mean", rug = TRUE,
+color = "sex", fill = "sex",
+palette = c("#00AFBB", "#E7B800"))
+```
+```{r}
+library(survival)
+surv_object <- Surv(time = ovarian$futime, event = ovarian$fustat)
+fit1 <- survfit(surv_object ~
+rx, data = ovarian)
+summary(fit1)
+```
+```{r}
+library(survival)
+library(survminer)
+surv_object <- Surv(time = ovarian$futime, event = ovarian$fustat)
+fit1 <- survfit(surv_object ~
+rx, data = ovarian)
+ggsurvplot(fit1, data = ovarian, pval = TRUE)
+```
+```{r}
+library(cmprsk)
+set.seed(10)
+ftime <- rexp(200)
+fstatus <- sample(0:2,200,replace=TRUE)
+cov <- matrix(runif(600),nrow=200)
+dimnames(cov)[[2]] <- c('x1','x2','x3')
+print(z <- crr(ftime,fstatus,cov))
+```
+```{r}
+library("aod")
+data(orob2)
+fm1 <- betabin(cbind(y, n - y) ~ seed, ~ 1, data = orob2)
+fm2 <- betabin(cbind(y, n - y) ~
+seed + root, ~ 1, data = orob2)
+anova(fm1, fm2)
+```
+```{r}
+library("psych")
+data(sat.act)
+corr.test(sat.act)
+```
+```{r}
+library("pheatmap")
+test = matrix(rnorm(200), 20, 10)
+test[1:10, seq(1, 10, 2)] = test[1:10, seq(1, 10, 2)] + 3
+test[11:20, seq(2, 10, 2)] = test[11:20, seq(2, 10, 2)] + 2
+test[15:20, seq(2, 10, 2)] = test[15:20, seq(2, 10, 2)] + 4
+colnames(test) = paste("Test", 1:10, sep = "")
+rownames(test) = paste("Gene", 1:20, sep = "")
+pheatmap(test)
+```
+```{r}
+library("TrialSize")
+sample=TrialSize::TwoSampleMean.Equality(0.05,0.2,sigma=1,k=1,margin=2)
+print(sample)
+```
+```{r}
+library(pROC)
+set.seed(42)
+controls <- rnorm(50, 100, 20)
+cases <- rnorm(50, 120, 20)
+roc(controls = controls,
+cases = cases,
+plot=T,
+ci=T)
+```
+```{r}
+plotly::plot_ly(economics, x = ~pop)
+```
+```{r}
+library(corrplot)
+data(mtcars)
+M = cor(mtcars)
+corrplot(M)
+```
+```{r}
+library(factoextra)
+data(mtcars)
+prcomp(mtcars, scale = TRUE)
+```
+```{r}
+library(ggbiplot)
+data(mtcars)
+pca <- prcomp(mtcars, scale. = TRUE)
+ggbiplot(pca)
+```
+```{r}
+library(dagitty) # Загружаем пакет
+d <- dagitty("dag {
+X -> Y
+C -> X
+C -> Y
+}")
+is.dagitty(d)
+adjustmentSets(d, exposure = "X", outcome = "Y")
+```
+```{r}
+library(tidymodels)
+library(rpart)
+rpart(Species ~ ., iris)
+```
+```{r}
+library(rattle)
+fancyRpartPlot(rpart(Species ~ ., iris))
+```
+```{r}
+library(ranger)
+ranger(Species ~ ., iris)
+```
+```{r}
+library(multcomp)
+library(GGally)
+library(yardstick)
+library(Hmisc)
+library(broom)
+library(ggfortify)
+```

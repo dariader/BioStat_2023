@@ -1,0 +1,151 @@
+---
+title: "Управление данными. Создание ADaM."
+format: pptx
+editor: visual
+---
+
+## Какие датасеты нужны для анализа?
+
+-   их создание эффективно;
+-   анализ на таких данных можно повторить;
+-   понятно, как проводить ревью такого анализа.
+
+Analysis Data Model (ADaM) позволяют стат.программистам и биостатистикам удобно производить анализ данных. Регулятор (или Спонсор), если им нужно провести ревью, ясно понимают, что и откуда взялось.
+
+[Основной опорный материал для практики \-- Implementation Guide](https://www.cdisc.org/system/files/members/standard/foundational/ADaMIG_v1.3.pdf)
+
+## Регуляторы
+
+-   FDA требует следование стандартам CDISC;
+-   EMA, China FDA рекоммендуют следовать им;
+-   Минздрав не требует и воспроизводимость не отслеживает.
+
+Важные файлы для ревьюера:
+
+-   собственно ADaM'ы;
+
+-   файл Define.xml;
+
+-   Analysis Data Reviewer's Guide (ADRG).
+
+[ссылка на Phuse, где об этом подробнее](https://advance.phuse.global/display/WEL/Analysis+Data+Reviewer%27s+Guide+%28ADRG%29+Package)
+
+## Основные принципы ADaM
+
+1.  Ясная и недвусмысленная взаимосвязь;
+
+2.  Прослеживаемость от SDTM;
+
+3.  Датасет должен быть в распространенном формате.
+
+Также датасеты должны сопровождаться метаданными и быть готовыми к анализу, не требовать дальнейших преобразований.
+
+## Прослеживаемость ADaM
+
+-   между переменной анализа и ее исходным набором данных и переменной, необходимой для соответствия требованиям ADaM;
+
+-   а также между результатом анализа (например, p-значением) и набором данных анализа.
+
+Как достигаем?
+
+Описываем алгоритма для получения из непосредственного предшественника.
+
+## Прослеживаемость ADaM (2)
+
+Прослеживаемость точек данных позволяет пользователю перейти непосредственно к конкретной записи (записям) предшественника:
+
+-   Как? Путем обеспечения четких ссылок на конкретные значения данных, использованные в качестве исходных для анализируемого значения.
+
+## Define.xml
+
+![Пример заголовка define файла](images/define.png){width="340"}
+
+[Папка, содержащая up-to-date гайд по Define](https://www.cdisc.org/system/files/members/standard/foundational/DefineV216.zip)
+
+## Из чего состоит ADaM?
+
+![Структура ADaM датасетов](adam%20structure.png){fig-align="center"}
+
+## ADSL - subject level analysis data set
+
+ADSL содержит 1 запись на одного субъекта, независимо от типа дизайна клинического исследования. В исследовании только один такой датасет.
+
+Любые другие наборы данных с 1 записью на субъект будут принадлежать к другие классы (например, классы "BASIC DATA STRUCTURE" и "ADAM OTHER").
+
+## ADSL - subject level analysis data set (2)
+
+ADSL содержит такие переменные, как флаги популяции на уровне субъекта, переменные планируемого и фактического лечения, демографическая информация, факторы рандомизации, переменные подгруппировки, факторы стратификации и важные даты.
+
+## ADSL - subject level analysis data set (3)
+
+ADSL содержит обязательные переменные (как указано в разделе 3.2 "Переменные ADSL"), а также другие переменные на уровне субъекта, которые важны для описания его состояния. другие переменные на уровне субъекта, которые важны для описания опыта субъекта в исследовании.
+
+Такая структура позволяет объединить ее с любым другим набором данных, включая наборы данных ADaM и SDTM. ADSL является источником переменных уровня субъекта, используемых в других наборах данных ADaM.
+
+## Basic Data Structure (BDS)
+
+Набор данных BDS содержит 1 или более записей для каждого субъекта, для каждого параметра анализа, для каждой временной точки анализа. Временная точка анализа требуется условно, в зависимости от анализа. В ситуациях, когда временная точка анализа отсутствует, структура представляет собой одну или несколько записей на субъект для каждого параметра анализа.
+
+## Basic Data Structure (BDS) (2)
+
+Временная точка анализа здесь представляет собой 1 или несколько фактических переменных, таких как Analysis Visit (AVISIT), Analysis Timepoint (ATPT) или другие временные переменные. Кроме того, для более полного описания структуры данного набора данных BDS могут потребоваться другие переменные.
+
+Например, Baseline Type (BASETYPE) необходима, когда в одном наборе данных имеется более одного определения бейзлайна для данного параметра анализа (PARAM).
+
+## Basic Data Structure (BDS) (3)
+
+Эти переменные включают анализируемое значение (например, AVAL) и описание анализируемого значения (например, PARAM). Другие переменные набора данных предоставляют дополнительную информацию об анализируемой величине (например, идентификация субъекта), описывают и отслеживают ее получение (например, DTYPE) или позволяют проводить ее анализ (например, переменные обработки, ковариаты).
+
+## Structure for Occurrence Data (OCCDS)
+
+Анализ встречаемости, например, с какой частотой происходило то или иное явление.
+
+Яркий пример -- ADAE, датасет, содержащий нежелательные вления. Данные по НЯ проходят медицинское кодирование.
+
+[Подробно о ключевых переменных \-- Implementation Guide](https://www.cdisc.org/system/files/members/standard/foundational/ADaM_OCCDS_Implementation_Guide%20v1.1.pdf)
+
+## Приступаем к сборке своего ADaM-like датасета
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(openxlsx)
+```
+```{r}
+path = "/home/daria/PycharmProjects/BioStat_2023/20231007/data/"
+files <- list.files(path = "/home/daria/PycharmProjects/BioStat_2023/20231007/data/", pattern = NULL, all.files = FALSE, full.names = FALSE)
+
+supp_ds <- read.xlsx(glue::glue(path,files[grepl("SUPPDS", files)][1]), na.strings = NA)
+
+inc_excl <- read.xlsx(glue::glue(path,files[grepl("IE_", files)][1]), na.strings = NA)
+
+vital_signs <- read.xlsx(glue::glue(path,files[grepl("VS_", files)][1]), na.strings = NA)
+
+subj_vis <- read.xlsx(glue::glue(path,files[grepl("SV_", files)][1]), na.strings = NA)
+
+stat_data <- read.xlsx(glue::glue(path,files[grepl("Patient", files)][1]), na.strings = NA)
+```
+```{r}
+
+colnames(stat_data) = c('STUDYID', 'SUBJID', 'STATUS', 'RANDN', 'PP', 'DOREASPP','SAF','DOREASSAF')
+stat_data$PPEFF <- ifelse(stat_data$PP=="Да", "Нет", "Да")
+stat_data$SAFEFF <- ifelse(stat_data$SAF=="Да", "Нет", "Да")
+
+stat_data %>% select(SUBJID, PPEFF, DOREASPP, SAFEFF, DOREASSAF, STATUS)
+```
+```{r}
+
+demography <- read.xlsx(glue::glue(path,files[grepl("DM", files)][1]), na.strings = NA)
+ demography <- demography %>%
+  select(SUBJID, SITEID,
+         AGE, SEX, RACE, ARM) %>%
+   mutate(AGE = as.numeric(AGE),
+          AGEU = "лет",
+          TRTP = if_else(ARM == "RT", "drug1", if_else(ARM == "TR", "drug2", "")),
+          TRTPN = case_when(TRTP == "drug1" ~ 1,
+                            TRTP == "drug2" ~ 2))
+
+substance_use <- read.xlsx(glue::glue(path,files[grepl("SU", files)][2]), na.strings = NA)
+
+
+```
