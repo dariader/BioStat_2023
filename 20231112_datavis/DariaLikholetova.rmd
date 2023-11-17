@@ -2,19 +2,25 @@
 title: "R Notebook"
 output: html_document
 ---
+```{r, include=F}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width=8, fig.height=5)
 
-1. Загрузите датасет life_expectancy_data.RDS (лежит в папке домашнего задания).
+```
+# 1.
+Загрузите датасет life_expectancy_data.RDS (лежит в папке домашнего задания).
 Это данные с основными показателями, через которые высчитывается ожидаемая
 продолжительности жизни по метрике World Development Indicator на уровне
 стран2. В данных оставлены строки, относящиеся к положению женщин в 2019 г.
 
 ```{r}
 library(readr)
-df <- read_rds('./20231112_datavis/life_expectancy_data.RDS')
+df <- read_rds('../20231112_datavis/life_expectancy_data.RDS')
 str(df)
+
 ```
 
-3. Сделайте интерактивный plotly график любых двух нумерических колонок.
+# 2
+Сделайте интерактивный plotly график любых двух нумерических колонок.
 Раскрасть по колонке континента, на котором расположена страна
 
 ```{r}
@@ -36,45 +42,151 @@ plot <- plot_ly(
     yaxis = list(title = "Life Expectancy")
   )
 
-# Display the plot
 print(plot)
 
 ```
 
 
-3. Проведите тест, на сравнение распределений колонки `Life expectancy` между
+# 3.
+Проведите тест, на сравнение распределений колонки `Life expectancy` между
 группами стран Африки и Америки. Вид статистического теста определите
 самостоятельно. Визуализируйте результат через библиотеку `rstatix`.
 ```{r}
 library(rstatix)
+library(ggplot2)
+library(ggpubr)
+
 qqnorm(df$`Life expectancy`)
-hist(df$`Life expectancy`, 100)
 df$LE = df$`Life expectancy`
-africa_data <- df[df$continent == "Africa", "Life expectancy"]
-america_data <- df[df$continent == "Americas", "Life expectancy"]
-wilcox_dat <- cbind(africa_data, america_data)
-names(wilcox_dat) <- c('africa','america')
-wilcox_result <-  df %>% filter(continent %in% c('Africa','Americas')) %>% rstatix::wilcox_test(formula=continent ~ LE, paired = TRUE)
-print(wilcox_result)
-continents <- df %>% filter(continent %in% c('Africa','Americas'))
-ggboxplot(continents,
-   x = "continent", y = "Life expectancy",
-  color = "continent", palette = "jco"
-  ) + stat_pvalue_manual(wilcox_result, label = "Wilcox test, p = {p}",
-                      y.position = 90)
+
+africa_data <- df[df$continent == "Africa", "LE"]$LE
+america_data <- df[df$continent == "Americas", "LE"]$LE
+
+mann_whitney_result <- wilcox.test(africa_data, america_data)
+mann_whitney_result$p.value <- round(mann_whitney_result$p.value, 3)
+
+
+ggplot(df %>% filter(continent %in% c("Africa", "Americas")), aes(x = continent, y = `Life expectancy`, fill = continent)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Life Expectancy between Africa and Americas",
+       x = "Continent",
+       y = "Life Expectancy") +
+  theme_minimal() +
+  stat_compare_means(
+    method = "wilcox.test",
+    label = "p.format"
+  )
 
 ```
 
 
-4. Сделайте новый датафрейм, в котором оставите все численные колонки кроме
+# 4.
+Сделайте новый датафрейм, в котором оставите все численные колонки кроме
 `Year`. Сделайте корреляционный анализ этих данных. Постройте два любых типа
 графиков для визуализации корреляций.
-5. Постройте иерархическую кластеризацию на этом датафрейме.
-6. Сделайте одновременный график heatmap и иерархической кластеризации.
-Содержательно интерпретируйте результат.
-7. Проведите PCA анализ на этих данных. Проинтерпретируйте результат.
-8. Постройте biplot график для PCA. Раскрасьте его по значениям континентов.
+```{r}
+library(corrplot)
+library(GGally)
+numeric_df <- df[, sapply(df, is.numeric) & names(df) != "Year" & names(df) != "LE", with = FALSE]
+correlation_matrix <- cor(numeric_df)
+ggpairs(numeric_df)
+corrplot(correlation_matrix, method = "color", type = "upper", order = "hclust", addrect = 3)
+
+```
+
+
+
+# 5.6.
+Постройте иерархическую кластеризацию на этом датафрейме.
+Сделайте одновременный график heatmap и иерархической кластеризации.
+Содержательно интерпретируйте результат
+
+Интерпретация результата: События иммунизации прямо пропорционально связаны между собой. Размер городской популяции обратно пропорционален размеру деревенской. Длительность жизни обратно пропорционально связана с детской смертностью, она же обратно пропорциональна связана с наличием базовых средств гигиены и бытовых технологий. GDP тем больше, чем больше GNI
+
+```{r}
+library(pheatmap)
+
+pheatmap(
+  correlation_matrix,
+  clustering_method = "complete",  # Hierarchical clustering method
+  color = colorRampPalette(c("white", "black", "red"))(100),  # Color palette
+  main = "Heatmap with Hierarchical Clustering"
+)
+
+```
+# 7.
+Проведите PCA анализ на этих данных. Проинтерпретируйте результат.
+
+
+интерпретация: примерно 50% данных обьясняется первыми двумя компонентами. При попытке найти кластеры, обнаружилось два. Также были найдены переменные, вносящие наибольший вклад в компоненты - иммунизация и размер городской популяции.
+```{r}
+library(plotly)
+library(factoextra)
+pca_result <- prcomp(numeric_df, center = TRUE, scale = TRUE)
+fviz_eig(pca_result, addlabels = TRUE)
+components <- pca_result$x
+loadings <- pca_result$rotation
+
+plot_ly(data = as.data.frame(components), x = ~PC1, y = ~PC2, mode = "markers") %>%
+  add_trace(text = rownames(components), hoverinfo = "text") %>%
+  layout(title = "PCA Components",
+         xaxis = list(title = "Principal Component 1"),
+         yaxis = list(title = "Principal Component 2"))
+
+plot_ly(data = as.data.frame(loadings), type = "bar",
+        x = ~rownames(loadings), y = ~PC1, name = "PC1") %>%
+  add_trace(y = ~PC2, name = "PC2") %>%
+  layout(title = "Variable Influence on Principal Components",
+         xaxis = list(title = "Variables"),
+         yaxis = list(title = "Loading"))
+
+fviz_nbclust(pca_result$x, kmeans, method = "wss", k.max = 10, nstart = 25)
+k <- 2
+clusters <- kmeans(components, centers = k)$cluster
+
+plot_ly(data = as.data.frame(components), x = ~PC1, y = ~PC2, color = ~factor(clusters), mode = "markers") %>%
+  add_trace(text = rownames(components), hoverinfo = "text") %>%
+  layout(title = "PCA Clusters",
+         xaxis = list(title = "Principal Component 1"),
+         yaxis = list(title = "Principal Component 2"))
+```
+# 8.
+Постройте biplot график для PCA. Раскрасьте его по значениям континентов.
 Переведите его в `plotly`. Желательно, чтобы при наведении на точку, вы могли
 видеть название страны.
-9. Дайте содержательную интерпретацию PCA анализу.
-10. Сравните результаты отображения точек между алгоритмами PCA и UMAP.
+
+```{r}
+library(ggfortify)
+library(plotly)
+pca_result <- prcomp(numeric_df, center = TRUE, scale = TRUE)
+
+components <- pca_result$x
+loadings <- pca_result$rotation
+pca_data <- data.frame(components, Continent = df$continent)
+biplot(pca_result, scale = 0, cex = 0.7)
+plot_ly(data = pca_data, x = ~PC1, y = ~PC2, color = ~Continent, text = ~rownames(pca_data), mode = "markers") %>%
+  layout(title = "Biplot for PCA",
+         xaxis = list(title = "Principal Component 1"),
+         yaxis = list(title = "Principal Component 2"))
+
+```
+# 9.
+Дайте содержательную интерпретацию PCA анализу.
+
+Нельзя сказать что есть какой-то паттерн в данных на основании PCA. Возможно группировочную переменную стоит поменять.
+
+
+# 10.
+Сравните результаты отображения точек между алгоритмами PCA и UMAP.
+```{r}
+library(umap)
+umap_result <- umap(pca_result$x, n_neighbors = 15, min_dist = 0.1, spread = 1)
+umap_data <- data.frame(UMAP1 = umap_result$layout[, 1], UMAP2 = umap_result$layout[, 2], Continent = df$continent)
+
+plot_ly(data = umap_data, x = ~UMAP1, y = ~UMAP2, color = ~Continent, text = ~rownames(umap_data), mode = "markers") %>%
+  layout(title = "UMAP",
+         xaxis = list(title = "UMAP 1"),
+         yaxis = list(title = "UMAP 2"))
+```
+
+На этом графике явно прослеживается две группы точек, паттерн которых не соответствует странам как и на PCA биплоте.
