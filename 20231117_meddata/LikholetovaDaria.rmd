@@ -1,0 +1,175 @@
+---
+title: "Специфика медицинских данных"
+output:
+   html_document:
+       toc: true
+       toc_float:
+           collapsed: false
+           smooth_scroll: true
+       theme: flatly
+---
+```{r, include=F}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width=8, fig.height=5)
+```
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+trauma_data <- read_xlsx('/home/daria/PycharmProjects/BioStat_2023/20231117_meddata/trauma.xlsx')
+```
+1. Дайте описательную статистику для переменных, включённых в датасет. Дополнительно
+рассчитайте, у какого количества пациентов и в каком проценте случаев у пациентов был
+снижен уровень гемоглобина? Используйте следующие референтные значения (Мужчины:
+13.5–16 г/дл, Женщины: 12–14 г/дл).
+
+```{r}
+reference_range_male <- c(13.5, 16)
+reference_range_female <- c(12, 14)
+
+# Assuming 'Sex' is the variable indicating gender
+cases_below_reference <- trauma_data %>%
+  filter(
+    (Sex == "Male" & Hb < reference_range_male[1]) |
+    (Sex == "Female" & Hb < reference_range_female[1])
+  )
+
+num_cases_below_reference <- nrow(cases_below_reference)
+percentage_cases_below_reference <- (num_cases_below_reference / nrow(trauma_data)) * 100
+
+cat("Количество пациентов с пониженным гемоглобином:", num_cases_below_reference, "\n")
+cat("Процент пациентов с пониженным гемоглобином:", percentage_cases_below_reference, "%\n")
+
+```
+2. Рассчитайте индекс массы тела у пациентов (кг / м2). Каков был средний (M (SD)) уровень
+ИМТ у пациентов, включённых в исследование? Какая доля пациентов имела ожирение (ИМТ
+> 30)?
+
+```{r}
+trauma_data$Height <- as.numeric(stringr::str_remove_all(trauma_data$Height, '\"'))
+trauma_data$Height_meters <- as.numeric(stringr::str_remove_all(trauma_data$Height, '\"')) * 0.0254
+trauma_data$Weight_kg <- as.numeric(trauma_data$Weight) * 0.453592
+trauma_data$BMI <- trauma_data$Weight_kg / (trauma_data$Height_meters^2)
+summary(trauma_data$BMI)
+
+mean_bmi <- mean(trauma_data$BMI, na.rm = TRUE)
+sd_bmi <- sd(trauma_data$BMI, na.rm = TRUE)
+percentage_obese <- mean(trauma_data$BMI > 30, na.rm = TRUE) * 100
+
+cat("Средний BMI:", mean_bmi, "\n")
+cat("Стандартное отклонение BMI:", sd_bmi, "\n")
+cat("Процент пациентов с ожирением (BMI > 30):", percentage_obese, "%\n")
+
+```
+3. Как выглядит ROC-кривая для предсказания летального исхода в течение 24 часов по
+переменной, характеризующей уровень гемоглобина? Постройте график. Чем может быть
+обусловлена такая форма кривой?
+
+Форма кривой может быть обусловлена 1) биологическими особенностями (толерантностью к пониженному или повышенному гемоглобину). 2) Влиянием дизайна эксперимента -  В выборке 46% пациентов у которых гемоглобин понижен.
+ Интерпретируя графики ниже, если specificity стремится к 1, то мы верно предсказываем что пациент не умрет. Далее, видно что specificity падает, и растет наоборот - sensitivity,  и мы можем верно предсказать что при высоких значениях гемоглобина вероятность смерти растет. При этом, промежуточные значения гемоглобина не позволяют предсказать смерть с высокой точностью.
+```{r}
+library(pROC)
+roc_curve <- roc(trauma_data$Death, trauma_data$Hb)
+
+# Plot the ROC curve
+ggroc(roc_curve) +
+  labs(title = "ROC Curve for Hemoglobin Level",
+       x = "1 - Specificity",
+       y = "Sensitivity") +
+  theme_minimal()
+
+
+```
+```{r}
+roc_coordinates <- coords(roc_curve)
+
+# Display the first few rows of the coordinates
+head(roc_coordinates)
+
+ggplot() +
+  # Plot the first line (sensitivity)
+  geom_line(data = data.frame(Hb = roc_coordinates$threshold, Prob_Death = roc_coordinates$sensitivity),
+            aes(x = Hb, y = Prob_Death, color = "Sensitivity")) +
+
+  # Plot the second line (specificity)
+  geom_line(data = data.frame(Hb = roc_coordinates$threshold, Prob_Death =  roc_coordinates$specificity),
+            aes(x = Hb, y = Prob_Death, color = "Specificity")) +
+
+  labs(title = "Relationship Between Hemoglobin and Predicted Probability of Death",
+       x = "Hemoglobin",
+       y = "Predicted Probability of Death",
+       color = "Metric") +
+  theme_minimal()
+
+```
+
+
+Чему равна площадь под ROC-кривой, которую вы построили в вопросе 3? Чему равен 95%
+двусторонний ДИ для площади под ROC-кривой, которую вы построили в вопросе 3?
+
+```{r}
+
+auc_value <- auc(roc_curve)
+ci_auc <- ci.auc(roc_curve)
+cat("AUC:", auc_value, "\n")
+cat("95% ДИ:", ci_auc[1], "-", ci_auc[3], "\n")
+
+```
+Исходя из полученного интевала (0.67 - 0.73) можно предположить низкую или умеренную диагностическую информативность уровня гемоглобина при предсказании смертности в течении 24 часов.
+5. Проведите ROC-анализ и определите, какое пороговое значение является оптимальным для
+предсказания летального исхода в течение 24 часов по шкале комы Глазго. Какой
+чувствительностью и специфичностью обладает данный порог?
+
+```{r}
+roc_curve_gcs <- roc(trauma_data$Death, trauma_data$GSC)
+ggplot(as.data.frame(coords(roc_curve_gcs, "all")),
+                       aes(x = 1 - specificity, y = sensitivity)) +
+  geom_line() +
+  labs(title = "ROC Curve for Glasgow Coma Scale",
+       x = "1 - Specificity",
+       y = "Sensitivity") +
+  theme_minimal()
+roc_curve_gcs  %>% coords(x = "best", best.method = "closest.topleft")
+```
+Эта шкала обладает достаточно высокой чувствительностью и специфичностью при определении смертности человека в течении 24 часов. При пороге в 8.5 балла этой шкалы вероятность верного определения смерти человека в течении 24 часов составляет 89%.
+
+6. Какая из количественных переменных в датасете (включая рассчитанный вами ранее ИМТ)
+обладает наибольшей площадью под ROC-кривой? Как вы можете интерпретировать это
+знание? Какая количественная переменная имеет наименьшую площадь?
+```{r}
+library(tidyr)
+trauma_data$height_reversed <- 1-trauma_data$Height
+trauma_data %>%
+    select("id",
+           "Age",
+           "Height",
+           "height_reversed",
+           "Weight",
+           "SBP",
+           "DBP",
+           "FOUR",
+           "GSC",
+           "Hb",
+           "BMI",
+           "Death") %>%
+    pivot_longer(cols = !Death) %>%
+    group_by(name) %>%
+    summarise(AUC = roc(Death, value, ci = T)$ci[2] %>% round(3),
+              AUC_LCL = roc(Death, value, ci = T)$ci[1] %>% round(3),
+              AUC_UCL = roc(Death, value, ci = T)$ci[3] %>% round(3))
+
+```
+Наибольшее AUC получается при использовании колонки FOUR, которая в свою очередь шкала комы при поступлении, учитывающая глазные, двигательные, стволовые, дыхательные реакции и паттерны. Чем выше значение AUC тем лучше можно предсказать response переменную (выше чувствительность и точность). Получается что FOUR имеет наибольшую предсказательную силу.
+
+Наименьшее AUC получается при использовании колонки Height. Однако, если использовать значения 1-Height (обратная зависимость смертности от роста), то она перестанет быть самой меньшей. И тогда видно что ближе всего к площади равной 0.5 колонка BMI, она и является наименьшей по площади.
+
+```{r}
+roc_curve_gcs <- roc(trauma_data$Death, trauma_data$FOUR)
+ggplot(as.data.frame(coords(roc_curve_gcs, "all")),
+                       aes(x = 1 - specificity, y = sensitivity)) +
+  geom_line() +
+  labs(title = "ROC Curve for FOUR scale",
+       x = "1 - Specificity",
+       y = "Sensitivity") +
+  theme_minimal()
+
+```
